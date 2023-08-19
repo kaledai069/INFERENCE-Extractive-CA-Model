@@ -32,9 +32,9 @@ parser.add_argument('--crossword_path', type=int, help='An integer argument')
 
 args = parser.parse_args()
 
-MODEL_PATH = "/content/dpr_biencoder_trained_500k.bin"
-ANS_TSV_PATH = "/content/all_answer_list.tsv"
-DENSE_EMBD_PATH = "/content/embeddings_all_answers_json_0*"
+MODEL_PATH = "/content/Inference_components/dpr_biencoder_trained_500k.bin"
+ANS_TSV_PATH = "/content/Inference_components/all_answer_list.tsv"
+DENSE_EMBD_PATH = "/content/Inference_components/embeddings_all_answers_json_0*"
 
 puzzle = json_CA_json_converter(args.crossword_path)
 crossword = Crossword(puzzle)
