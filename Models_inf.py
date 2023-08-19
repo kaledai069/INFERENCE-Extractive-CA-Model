@@ -217,7 +217,7 @@ class FakeRetrieverArgs:
         self.sequence_length = 512
         self.do_fill_lower_case = False
         self.desegment_valid_fill = False
-        self.no_cuda = False
+        self.no_cuda = True
         self.local_rank = -1
         self.fp16 = False
         self.fp16_opt_level = "O1"
@@ -241,7 +241,8 @@ class DPRForCrossword(object):
         args.ctx_file = ctx_file
         args.encoded_ctx_file = encoded_ctx_file
         args.batch_size = batch_size
-        self.device = torch.device("cuda:"+str(process_id%torch.cuda.device_count()))
+        # self.device = torch.device("cuda:"+str(process_id%torch.cuda.device_count()))
+        self.device = 'cpu'
 
         setup_args_gpu(args)
         print_args(args)

@@ -114,3 +114,4 @@ class Solver:
             words_total += 1
         print("Letters Correct: {}/{} | Words Correct: {}/{}".format(int(letters_correct), int(letters_total), int(words_correct), int(words_total)))
         print("Letters Correct: {}% | Words Correct: {}%".format(float(letters_correct/letters_total*100), float(words_correct/words_total*100)))
+        return [(letters_correct/letters_total) * 100, (words_correct/words_total) * 100]
