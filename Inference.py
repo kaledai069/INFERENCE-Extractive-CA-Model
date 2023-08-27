@@ -27,9 +27,9 @@ import requests
 import json
 import datetime
 
-MODEL_PATH = "./Inference_components/dpr_biencoder_trained_500k.bin"
+MODEL_PATH = "./Inference_components/dpr_biencoder_trained_EPOCH_6_SHARD_6_COMPLETE.bin"
 ANS_TSV_PATH = "./Inference_components/all_answer_list.tsv"
-DENSE_EMBD_PATH = "./Inference_components/embeddings_all_answers_json_0*"
+DENSE_EMBD_PATH = "./Inference_components/embeddings_SHARDED_BERT_json_0*"
 
 def getGrid(dateStr):
     headers = {
@@ -67,7 +67,7 @@ for dim in ['across', 'down']:
 		clue_answer_list = puzzle['clues'][dim][grid_num]
 		clue_section = clue_answer_list[0]
 		ans_section = clue_answer_list[1]
-		clue_section = clue_section.replace("&quot;", "").replace("&#39;", "")
+		clue_section = clue_section.replace("&quot;", "").replace("&#39;", "").replace("<em>", "").replace("</em>", "")
 		puzzle['clues'][dim][grid_num] = [clue_section, ans_section]
 
 all_clues = puzzle['clues']

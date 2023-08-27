@@ -155,5 +155,6 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
 
     # Display the grid with characters, padding, and inner grid lines
     cv2.imshow('Solved Crossword', image)
+    cv2.imwrite('./solved_crosswords/crossword_TODAY.jpg', image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

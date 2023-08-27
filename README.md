@@ -2,5 +2,5 @@
 #### Date: 2023/08/20
 
 <p align="center">
-  <img src="solved_crosswords/crossword_8-20-2023.png" width="1000" title="Solved Example" alt="">
+  <img src="solved_crosswords/crossword_TODAY.jpg" width="1000" title="Solved Example" alt="">
 </p>

@@ -231,7 +231,7 @@ class DPRForCrossword(object):
         model_file,
         ctx_file,
         encoded_ctx_file,
-        batch_size=6000,
+        batch_size = 16,
         retrievalmodel=False,
         process_id=0
     ):
