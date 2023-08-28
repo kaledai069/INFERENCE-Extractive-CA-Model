@@ -27,7 +27,7 @@ import requests
 import json
 import datetime
 
-MODEL_PATH = "./Inference_components/dpr_biencoder_trained_EPOCH_6_SHARD_6_COMPLETE.bin"
+MODEL_PATH = "./Inference_components/dpr_biencoder_trained_epoch_2_(MIDDLE).bin"
 ANS_TSV_PATH = "./Inference_components/all_answer_list.tsv"
 DENSE_EMBD_PATH = "./Inference_components/embeddings_SHARDED_BERT_json_0*"
 
