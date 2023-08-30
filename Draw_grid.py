@@ -12,7 +12,7 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     wrong_A_num, wrong_D_num = wrong_clues
 
     if len(all_clue_info[0]) > 40 or len(all_clue_info[1]) > 40:
-        padding_h = 100
+        padding_h = 120
     else:
         padding_h = 80
 
