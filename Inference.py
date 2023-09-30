@@ -27,9 +27,20 @@ import requests
 import json
 import datetime
 
-MODEL_PATH = "./Inference_components/dpr_biencoder_trained_epoch_2_(MIDDLE).bin"
-ANS_TSV_PATH = "./Inference_components/all_answer_list.tsv"
-DENSE_EMBD_PATH = "./Inference_components/embeddings_SHARDED_BERT_json_0*"
+
+MODEL_CONFIG = {
+	'bert': {
+		'MODEL_PATH' : "./Inference_components/dpr_biencoder_trained_EPOCH_2_COMPLETE.bin",
+		'ANS_TSV_PATH': "./Inference_components/all_answer_list.tsv",
+		'DENSE_EMBD_PATH': "./Inference_components/embeddings_BERT_EPOCH_2_COMPLETE0.pkl"
+	},
+	'distilbert': {
+		'MODEL_PATH': "./Inference_components/distilbert_EPOCHs_5_COMPLETE.bin", 
+		'ANS_TSV_PATH': "./Inference_components/all_answer_list.tsv",
+		'DENSE_EMBD_PATH': "./Inference_components/distilbert_5_epochs_embeddings.pkl"
+	}
+}
+
 
 def getGrid(dateStr):
     headers = {
@@ -51,11 +62,14 @@ def getGrid(dateStr):
         print(f"Request failed with status code {response.status_code}.")
 
 parser = argparse.ArgumentParser(description="My Python Script")
-parser.add_argument('--crossword_path', type=str, help='Path to crossword JSON file.')
+parser.add_argument('--crossword_path', default = "nothing", type=str, help='Path to crossword JSON file.')
 parser.add_argument('--date', type = str, help = 'Crossdate to inference to.')
+parser.add_argument('--model', type = str, default = "bert", help = "Model type to inference with.")
 args = parser.parse_args()
 
+MODEL_TYPE = vars(args)['model']
 
+# Run the model off the 'DATE' -> "20XX/XX/XX" or from the .puz Crossword data file. 
 if args.date:
 	puzzle = getGrid(args.date)
 	puzzle = json_CA_json_converter(puzzle, False)
@@ -87,13 +101,21 @@ all_clue_info = [across_clue_data, down_clue_data]
 
 crossword = Crossword(puzzle)
 start_time = time.time()
-try: 
-	solver = BPSolver(crossword, model_path = MODEL_PATH, ans_tsv_path = ANS_TSV_PATH, dense_embd_path = DENSE_EMBD_PATH, max_candidates = 10000)
-	solution = solver.solve(num_iters = 100, iterative_improvement_steps = 0)
-	accu_list = solver.evaluate(solution)
-except: 
-	print("Error Occured for date: ", args.date)
-	accu_list = []
+
+choosen_model_path = MODEL_CONFIG[MODEL_TYPE]['MODEL_PATH']
+ans_list_path = MODEL_CONFIG[MODEL_TYPE]['ANS_TSV_PATH']
+dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
+
+
+# print(choosen_model_path, ans_list_path, dense_embedding_path)
+# try: 
+
+solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 5000, model_type = MODEL_TYPE)
+solution = solver.solve(num_iters = 100, iterative_improvement_steps = 0)
+accu_list = solver.evaluate(solution)
+# except: 
+# 	print("Error Occured for date: ", args.date)
+# 	accu_list = []
 
 end_time = time.time()
 print("Total Inference Time: ", end_time - start_time, " seconds")

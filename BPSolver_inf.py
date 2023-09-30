@@ -97,15 +97,17 @@ class BPSolver(Solver):
                  model_path,
                  ans_tsv_path,
                  dense_embd_path,
-                 max_candidates = 500000,
-                 process_id=0,
+                 max_candidates = 5000,
+                 process_id = 0,
+                 model_type = 'bert',
                  **kwargs):
         super().__init__(crossword, 
                          model_path,
                          ans_tsv_path,
                          dense_embd_path,
-                         max_candidates=max_candidates,
-                         process_id=process_id,
+                         max_candidates = max_candidates,
+                         process_id  = process_id,
+                         model_type = model_type,
                          **kwargs)
         self.crossword = crossword
 

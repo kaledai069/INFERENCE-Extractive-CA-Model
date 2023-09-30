@@ -25,13 +25,14 @@ from Model_utils_inf import load_states_from_checkpoint, get_model_obj
 SEGMENTER_CACHE = {}
 RERANKER_CACHE = {}
 
-def setup_closedbook(model_path, ans_tsv_path, dense_embd_path, process_id):
+def setup_closedbook(model_path, ans_tsv_path, dense_embd_path, process_id, model_type):
     dpr = DPRForCrossword(
         model_path,
         ans_tsv_path,
         dense_embd_path,
         retrievalmodel = False,
-        process_id=process_id
+        process_id=process_id,
+        model_type = model_type
     )
     return dpr
 
@@ -165,12 +166,14 @@ class DenseRetriever(object):
         tensorizer: Tensorizer,
         index: DenseIndexer,
         device=None,
+        model_type = 'bert'
     ):
         self.question_encoder = question_encoder
         self.batch_size = batch_size
         self.tensorizer = tensorizer
         self.index = index
         self.device = device
+        self.model_type = model_type
 
     def generate_question_vectors(self, questions: List[str]) -> T:
         n = len(questions)
@@ -187,8 +190,13 @@ class DenseRetriever(object):
 
                 q_ids_batch = torch.stack(batch_token_tensors, dim=0).to(self.device)
                 q_seg_batch = torch.zeros_like(q_ids_batch).to(self.device)
-                q_attn_mask = self.tensorizer.get_attn_mask(q_ids_batch)
-                _, out, _ = self.question_encoder(q_ids_batch, q_seg_batch, q_attn_mask)
+                # q_attn_mask = self.tensorizer.get_attn_mask(q_ids_batch)    
+                q_attn_mask = (q_ids_batch != 0)
+
+                if self.model_type == 'bert':
+                    _, out, _ = self.question_encoder(q_ids_batch, q_seg_batch, q_attn_mask)
+                elif self.model_type == 'distilbert':
+                    _, out, _ = self.question_encoder(q_ids_batch, q_attn_mask)
 
                 query_vectors.extend(out.cpu().split(1, dim=0))
     
@@ -233,7 +241,8 @@ class DPRForCrossword(object):
         encoded_ctx_file,
         batch_size = 16,
         retrievalmodel=False,
-        process_id=0
+        process_id = 0,
+        model_type = 'bert'
     ):
         self.retrievalmodel = retrievalmodel  # am I a wikipedia retrieval model or a closed-book model
         args = FakeRetrieverArgs()
@@ -243,14 +252,13 @@ class DPRForCrossword(object):
         args.batch_size = batch_size
         # self.device = torch.device("cuda:"+str(process_id%torch.cuda.device_count()))
         self.device = 'cpu'
+        self.model_type = model_type
 
         setup_args_gpu(args)
-        print_args(args)
-
         saved_state = load_states_from_checkpoint(args.model_file)
         set_encoder_params_from_state(saved_state.encoder_params, args)
 
-        tensorizer, encoder, _ = init_biencoder_components(args.encoder_model_type, args, inference_only=True)
+        tensorizer, encoder, _ = init_biencoder_components(args.encoder_model_type, args, inference_only = True)
 
         question_encoder = encoder.question_model
         question_encoder = question_encoder.to(self.device)
@@ -276,12 +284,12 @@ class DPRForCrossword(object):
             tensorizer,
             index,
             self.device,
+            self.model_type
         )
 
         # index all passages
-        ctx_files_pattern = args.encoded_ctx_file
-        input_paths = glob.glob(ctx_files_pattern)
-        self.retriever.index.index_data(input_paths)
+        embd_file_path = args.encoded_ctx_file
+        self.retriever.index.index_data(embd_file_path[0])
 
         self.all_passages = self.load_passages(args.ctx_file)
         self.fill2id = {}

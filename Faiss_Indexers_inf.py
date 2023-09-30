@@ -203,11 +203,11 @@ class DenseHNSWFlatIndexer(DenseIndexer):
         self.phi = None
 
 
-def iterate_encoded_files(vector_files: list) -> Iterator[Tuple[object, np.array]]:
-    for i, file in enumerate(vector_files):
-        logger.info("Reading file %s", file)
-        with open(file, "rb") as reader:
-            doc_vectors = pickle.load(reader)
-            for doc in doc_vectors:
-                db_id, doc_vector = doc
-                yield db_id, doc_vector
+def iterate_encoded_files(vector_files: str) -> Iterator[Tuple[object, np.array]]:
+    # for i, file in enumerate(vector_files):
+    logger.info("Reading file %s", vector_files)
+    with open(vector_files, "rb") as reader:
+        doc_vectors = pickle.load(reader)
+        for doc in doc_vectors:
+            db_id, doc_vector = doc
+            yield db_id, doc_vector

@@ -16,13 +16,14 @@ class Solver:
         crossword (Crossword): puzzle to solve
         max_candidates (int): number of answer candidates to consider per clue
     """
-    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates=1000, process_id=0):
+    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates=1000, process_id = 0, model_type = 'bert'):
         self.crossword = crossword
         self.max_candidates = max_candidates
         self.process_id = process_id
         self.model_path = model_path
         self.ans_tsv_path = ans_tsv_path
-        self.dense_embd_glob = dense_embd_path
+        self.dense_embd_glob = dense_embd_path, 
+        self.model_type = model_type
         self.get_candidates()
     
     def get_candidates(self):
@@ -45,8 +46,9 @@ class Solver:
                 clue = clue[:match.start()] + self.crossword.variables[var]['clue'] + clue[match.end():]
                 all_clues[idx] = clue
 
+        print("MODEL PATH: ", type(self.dense_embd_glob))
         # get predictions
-        dpr = setup_closedbook(self.model_path, self.ans_tsv_path, self.dense_embd_glob, self.process_id)
+        dpr = setup_closedbook(self.model_path, self.ans_tsv_path, self.dense_embd_glob, self.process_id, self.model_type)
         all_words, all_scores = answer_clues(dpr, all_clues, max_answers=self.max_candidates, output_strings=True) 
         for index, var in enumerate(self.crossword.variables):
             length = len(self.crossword.variables[var]["gold"])
