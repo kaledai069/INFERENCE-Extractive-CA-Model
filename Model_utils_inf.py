@@ -152,6 +152,8 @@ def get_model_file(args, file_prefix) -> str:
 
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
     logger.info("Reading saved model from s", model_file)
+    if isinstance(model_file, tuple):
+        model_file = model_file[0]
     state_dict = torch.load(
         model_file, map_location=lambda s, l: default_restore_location(s, "cpu")
     )

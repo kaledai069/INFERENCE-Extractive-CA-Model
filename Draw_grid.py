@@ -2,7 +2,8 @@ import numpy as np
 import cv2
 
 
-def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues):
+def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, puzzle_date, model_type):
+    print(len(grid_num_matrix), len(grid_num_matrix[0]))
     rows, cols = 15, 15
     cell_size = 38
     padding_w = 340
@@ -12,9 +13,9 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     wrong_A_num, wrong_D_num = wrong_clues
 
     if len(all_clue_info[0]) > 40 or len(all_clue_info[1]) > 40:
-        padding_h = 120
+        padding_h = 180
     else:
-        padding_h = 80
+        padding_h = 120
 
     width = cols * cell_size + 2 * padding_w
     height = rows * cell_size + 2 * padding_h
@@ -66,6 +67,12 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     t_x = width // 2 + 25
     t_y = 30
     cv2.putText(image, word_accuracy_text, (t_x, t_y), font, 0.65, (0, 0, 0), font_thickness, cv2.LINE_AA)
+
+    text_size = cv2.getTextSize(model_type, font, font_scale, font_thickness)[0]
+    font = cv2.FONT_HERSHEY_DUPLEX
+    t_x = width // 2 + 90
+    t_y = 30
+    cv2.putText(image, model_type, (t_x, t_y), font, 0.65, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
     # text for 'across'
     text_size = cv2.getTextSize("ACROSS", font, font_scale, font_thickness)[0]
@@ -155,6 +162,7 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
 
     # Display the grid with characters, padding, and inner grid lines
     cv2.imshow('Solved Crossword', image)
-    cv2.imwrite('./solved_crosswords/crossword_TODAY.jpg', image)
+    output_file_path = f"./solved_crosswords/crossword_{puzzle_date}-{model_type}.jpg"
+    cv2.imwrite(output_file_path, image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

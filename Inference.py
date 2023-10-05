@@ -35,9 +35,9 @@ MODEL_CONFIG = {
 		'DENSE_EMBD_PATH': "./Inference_components/embeddings_BERT_EPOCH_2_COMPLETE0.pkl"
 	},
 	'distilbert': {
-		'MODEL_PATH': "./Inference_components/distilbert_EPOCHs_5_COMPLETE.bin", 
+		'MODEL_PATH': "./Inference_components/distilbert_EPOCHs_7_COMPLETE.bin", 
 		'ANS_TSV_PATH': "./Inference_components/all_answer_list.tsv",
-		'DENSE_EMBD_PATH': "./Inference_components/distilbert_5_epochs_embeddings.pkl"
+		'DENSE_EMBD_PATH': "./Inference_components/distilbert_7_epochs_embeddings.pkl"
 	}
 }
 
@@ -68,6 +68,7 @@ parser.add_argument('--model', type = str, default = "bert", help = "Model type 
 args = parser.parse_args()
 
 MODEL_TYPE = vars(args)['model']
+DATE = vars(args)['date']
 
 # Run the model off the 'DATE' -> "20XX/XX/XX" or from the .puz Crossword data file. 
 if args.date:
@@ -108,14 +109,13 @@ dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
 
 
 # print(choosen_model_path, ans_list_path, dense_embedding_path)
-# try: 
-
-solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 5000, model_type = MODEL_TYPE)
-solution = solver.solve(num_iters = 100, iterative_improvement_steps = 0)
-accu_list = solver.evaluate(solution)
-# except: 
-# 	print("Error Occured for date: ", args.date)
-# 	accu_list = []
+try: 
+	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 20000, model_type = MODEL_TYPE)
+	solution = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
+	accu_list = solver.evaluate(solution)
+except: 
+	print("Error Occured for date: ", args.date)
+	accu_list = []
 
 end_time = time.time()
 print("Total Inference Time: ", end_time - start_time, " seconds")
@@ -187,4 +187,4 @@ wrong_D_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split('
 # accu_list = [69, 59]
 
 wrong_clues = [wrong_A_num, wrong_D_num]
-draw_grid(solution, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues)
+draw_grid(solution, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)

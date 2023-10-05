@@ -289,7 +289,11 @@ class DPRForCrossword(object):
 
         # index all passages
         embd_file_path = args.encoded_ctx_file
-        self.retriever.index.index_data(embd_file_path[0])
+        if isinstance(embd_file_path, str):
+            file_path = embd_file_path
+        else:
+            file_path = embd_file_path[0]
+        self.retriever.index.index_data(file_path)
 
         self.all_passages = self.load_passages(args.ctx_file)
         self.fill2id = {}
@@ -316,6 +320,8 @@ class DPRForCrossword(object):
     @staticmethod
     def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
         docs = {}
+        if isinstance(ctx_file, tuple):
+            ctx_file = ctx_file[0]
         if ctx_file.endswith(".gz"):
             with gzip.open(ctx_file, "rt") as tsvfile:
                 reader = csv.reader(

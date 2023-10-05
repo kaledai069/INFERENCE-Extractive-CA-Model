@@ -46,7 +46,7 @@ class Solver:
                 clue = clue[:match.start()] + self.crossword.variables[var]['clue'] + clue[match.end():]
                 all_clues[idx] = clue
 
-        print("MODEL PATH: ", type(self.dense_embd_glob))
+        # print("MODEL PATH: ", type(self.dense_embd_glob))
         # get predictions
         dpr = setup_closedbook(self.model_path, self.ans_tsv_path, self.dense_embd_glob, self.process_id, self.model_type)
         all_words, all_scores = answer_clues(dpr, all_clues, max_answers=self.max_candidates, output_strings=True) 
@@ -70,10 +70,10 @@ class Solver:
  
             # for debugging purposes, print the rank of the gold answer on our candidate list
             # the gold answer is otherwise *not* used in any way during solving
-            # if self.crossword.variables[var]["gold"] in words:
-            #     print(clue, self.crossword.variables[var]["gold"], words.index(self.crossword.variables[var]["gold"]))
-            # else:
-            #     print('not found', clue, self.crossword.variables[var]["gold"])
+            if self.crossword.variables[var]["gold"] in words:
+                print(clue, self.crossword.variables[var]["gold"], words.index(self.crossword.variables[var]["gold"]))
+            else:
+                print('not found', clue, self.crossword.variables[var]["gold"])
 
             # fill up some data structures used later in solving
             for word, score in zip(words, scores):
