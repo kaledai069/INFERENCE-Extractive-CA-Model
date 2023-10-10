@@ -21,6 +21,7 @@ from Options_inf import setup_args_gpu, print_args, set_encoder_params_from_stat
 from Faiss_Indexers_inf import DenseIndexer, DenseFlatIndexer
 from Data_utils_inf import Tensorizer
 from Model_utils_inf import load_states_from_checkpoint, get_model_obj
+import time
 
 SEGMENTER_CACHE = {}
 RERANKER_CACHE = {}
@@ -201,6 +202,7 @@ class DenseRetriever(object):
                 query_vectors.extend(out.cpu().split(1, dim=0))
     
         query_tensor = torch.cat(query_vectors, dim=0)
+        print("CLUE Vector Shape", query_tensor.shape)
         assert query_tensor.size(0) == len(questions)
         return query_tensor
 
@@ -352,9 +354,11 @@ class DPRForCrossword(object):
         if max_answers > self.len_all_passages:
             max_answers = self.len_all_passages
 
+        start_time = time.time()
         # get top k results
         top_ids_and_scores = self.retriever.get_top_docs(questions_tensor.numpy(), max_answers)
-        
+        end_time = time.time()
+        print("\n\nTime taken by FAISS INDEXER: ", end_time - start_time)
         if not output_strings:
             return top_ids_and_scores
         else:

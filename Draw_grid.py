@@ -2,26 +2,29 @@ import numpy as np
 import cv2
 
 
-def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, puzzle_date, model_type):
+def draw_grid(data, grid_size, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, puzzle_date, model_type):
     print(len(grid_num_matrix), len(grid_num_matrix[0]))
-    rows, cols = 15, 15
+    rows, cols = grid_size
     cell_size = 38
     padding_w = 340
 
-    BOX_OFFSET = 35
+    BOX_OFFSET = 15
 
     wrong_A_num, wrong_D_num = wrong_clues
 
-    if len(all_clue_info[0]) > 40 or len(all_clue_info[1]) > 40:
-        padding_h = 180
-    else:
-        padding_h = 120
+    # if len(all_clue_info[0]) > 40 or len(all_clue_info[1]) > 40:
+    #     padding_h = 120
+    # else:
+    #     padding_h = 60 
 
+    padding_h = 70
     width = cols * cell_size + 2 * padding_w
     height = rows * cell_size + 2 * padding_h
 
     image = np.ones((height, width, 3), dtype=np.uint8) * 255
-
+    font_scale = 0.65
+    font_thickness = 1
+    font = cv2.FONT_HERSHEY_SIMPLEX
 
     for i in range(rows):
         for j in range(cols):
@@ -53,7 +56,7 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
                 grid_num_x = cell_x + 2
                 grid_num_y = cell_y + 10
                 cv2.putText(image, grid_num, (grid_num_x, grid_num_y), font, 0.28, (0, 0, 0, 96), 1, cv2.LINE_AA)
-
+    
     letter_accuracy_text = f"Letter Accuracy: {accu_list[0]:.2f} %"
     text_size = cv2.getTextSize(letter_accuracy_text, font, font_scale, font_thickness)[0]
     font = cv2.FONT_HERSHEY_DUPLEX
@@ -62,12 +65,14 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     cv2.putText(image, letter_accuracy_text, (t_x, t_y), font, 0.65, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
     word_accuracy_text = f"Word Accuracy: {accu_list[1]:.2f} %"
-    text_size = cv2.getTextSize(word_accuracy_text, font, font_scale, font_thickness)[0]
+    word_text_size = cv2.getTextSize(word_accuracy_text, font, font_scale, font_thickness)[0]
     font = cv2.FONT_HERSHEY_DUPLEX
-    t_x = width // 2 + 25
+    print(word_text_size)
+    t_x = width // 2 + (rows * cell_size) // 2 - word_text_size[0]
     t_y = 30
     cv2.putText(image, word_accuracy_text, (t_x, t_y), font, 0.65, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
+    '''
     text_size = cv2.getTextSize(model_type, font, font_scale, font_thickness)[0]
     font = cv2.FONT_HERSHEY_DUPLEX
     t_x = width // 2 + 90
@@ -88,10 +93,13 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     t_y = 40
     cv2.putText(image, "DOWN", (t_x, t_y), font, 0.75, (0, 0, 0), 1, cv2.LINE_AA)
 
+    '''
     text_limit = 500
 
     y_start_ind = 0
     font = cv2.FONT_HERSHEY_SIMPLEX
+
+    ''' 
     for i in range(len(all_clue_info[0])):
         clue_text = all_clue_info[0][i][0] + '. ' + all_clue_info[0][i][1]
 
@@ -147,7 +155,7 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
             cv2.putText(image, clue_text, (t_x, t_y), font, 0.40, color, 1, cv2.LINE_AA)
             y_start_ind += 1
 
-
+    '''
     for i in range(rows + 1):
         y = i * cell_size + padding_h - BOX_OFFSET
         cv2.line(image, (padding_w, y), (width - padding_w, y), (0, 0, 0), 1)
@@ -155,14 +163,15 @@ def draw_grid(data, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_i
     for j in range(cols + 1):
         x = j * cell_size + padding_w 
         cv2.line(image, (x, padding_h - BOX_OFFSET), (x, height - padding_h - BOX_OFFSET), (0, 0, 0), 1)
-
     # Draw a border around the grid
     border_thickness = 2  # You can adjust this as needed
     cv2.rectangle(image, (padding_w, padding_h - BOX_OFFSET), (width - padding_w - 1, height - padding_h - 1 - BOX_OFFSET), (0, 0, 0), border_thickness)
 
     # Display the grid with characters, padding, and inner grid lines
     cv2.imshow('Solved Crossword', image)
-    output_file_path = f"./solved_crosswords/crossword_{puzzle_date}-{model_type}.jpg"
+    month, day, year = puzzle_date.split('/')
+    output_file_path = f"./solved_crosswords/crossword_{month}-{day}-{year}.jpg"
+    print(output_file_path)
     cv2.imwrite(output_file_path, image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

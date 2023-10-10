@@ -16,7 +16,7 @@ class Solver:
         crossword (Crossword): puzzle to solve
         max_candidates (int): number of answer candidates to consider per clue
     """
-    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates=1000, process_id = 0, model_type = 'bert'):
+    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates = 1000, process_id = 0, model_type = 'bert'):
         self.crossword = crossword
         self.max_candidates = max_candidates
         self.process_id = process_id
@@ -70,10 +70,10 @@ class Solver:
  
             # for debugging purposes, print the rank of the gold answer on our candidate list
             # the gold answer is otherwise *not* used in any way during solving
-            if self.crossword.variables[var]["gold"] in words:
-                print(clue, self.crossword.variables[var]["gold"], words.index(self.crossword.variables[var]["gold"]))
-            else:
-                print('not found', clue, self.crossword.variables[var]["gold"])
+            # if self.crossword.variables[var]["gold"] in words:
+            #     print(clue, self.crossword.variables[var]["gold"], words.index(self.crossword.variables[var]["gold"]))
+            # else:
+            #     print('not found', clue, self.crossword.variables[var]["gold"])
 
             # fill up some data structures used later in solving
             for word, score in zip(words, scores):

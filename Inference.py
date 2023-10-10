@@ -87,6 +87,9 @@ for dim in ['across', 'down']:
 
 all_clues = puzzle['clues']
 
+rows = puzzle['metadata']['rows']
+cols = puzzle['metadata']['cols']
+
 across_clue_data = []
 down_clue_data = []
 
@@ -110,7 +113,7 @@ dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
 
 # print(choosen_model_path, ans_list_path, dense_embedding_path)
 try: 
-	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 20000, model_type = MODEL_TYPE)
+	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 40000, model_type = MODEL_TYPE)
 	solution = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
 	accu_list = solver.evaluate(solution)
 except: 
@@ -143,8 +146,6 @@ for i in range(len(solution)):
 		if solution[i][j] == '':
 			solution[i][j] = 0
 
-rows = 15
-cols = 15
 
 overlay_truth_matrix = [[0] * cols for _ in range(rows)]
 grid_num_matrix = [["-"] * cols for _ in range(rows)]
@@ -187,4 +188,4 @@ wrong_D_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split('
 # accu_list = [69, 59]
 
 wrong_clues = [wrong_A_num, wrong_D_num]
-draw_grid(solution, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)
+draw_grid(solution, [rows, cols], overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)
