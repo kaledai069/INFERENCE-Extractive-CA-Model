@@ -16,7 +16,7 @@ class Solver:
         crossword (Crossword): puzzle to solve
         max_candidates (int): number of answer candidates to consider per clue
     """
-    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates = 1000, process_id = 0, model_type = 'bert'):
+    def __init__(self, crossword, model_path, ans_tsv_path, dense_embd_path, max_candidates = 100, process_id = 0, model_type = 'bert'):
         self.crossword = crossword
         self.max_candidates = max_candidates
         self.process_id = process_id
@@ -49,7 +49,7 @@ class Solver:
         # print("MODEL PATH: ", type(self.dense_embd_glob))
         # get predictions
         dpr = setup_closedbook(self.model_path, self.ans_tsv_path, self.dense_embd_glob, self.process_id, self.model_type)
-        all_words, all_scores = answer_clues(dpr, all_clues, max_answers=self.max_candidates, output_strings=True) 
+        all_words, all_scores = answer_clues(dpr, all_clues, max_answers = self.max_candidates, output_strings=True) 
         for index, var in enumerate(self.crossword.variables):
             length = len(self.crossword.variables[var]["gold"])
             self.candidates[var] = {"words": [], "bit_array": None, "weights": {}}
@@ -76,8 +76,9 @@ class Solver:
             #     print('not found', clue, self.crossword.variables[var]["gold"])
 
             # fill up some data structures used later in solving
-            for word, score in zip(words, scores):
-                self.candidates[var]["weights"][word] = score
+            # for word, score in zip(words, scores):
+            #     self.candidates[var]["weights"][word] = score
+            
             weights = self.candidates[var]["weights"]
             self.candidates[var]["words"] = sorted(weights, key=weights.get)
             self.candidates[var]["bit_array"] = np.zeros((len(chars), length, len(self.candidates[var]["words"])))

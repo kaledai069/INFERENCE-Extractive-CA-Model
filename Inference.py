@@ -113,7 +113,7 @@ dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
 
 # print(choosen_model_path, ans_list_path, dense_embedding_path)
 try: 
-	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 40000, model_type = MODEL_TYPE)
+	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 500, model_type = MODEL_TYPE)
 	solution = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
 	accu_list = solver.evaluate(solution)
 except: 

@@ -9,6 +9,7 @@ from tqdm import trange
 
 from Utils_inf import print_grid, get_word_flips
 from Solver_inf import Solver
+from Models_inf import setup_t5_reranker, t5_reranker_score_with_clue
 
 # the probability of each alphabetical character in the crossword
 UNIGRAM_PROBS = [('A', 0.0897379968935765), ('B', 0.02121248877769636), ('C', 0.03482206634145926), ('D', 0.03700942543460491), ('E', 0.1159773210750429), ('F', 0.017257461694024614), ('G', 0.025429024796296124), ('H', 0.033122967601502), ('I', 0.06800036223479956), ('J', 0.00294611331754349), ('K', 0.013860682888259786), ('L', 0.05130800574373874), ('M', 0.027962776827660175), ('N', 0.06631994270448001), ('O', 0.07374646543246745), ('P', 0.026750756212433214), ('Q', 0.001507814175439393), ('R', 0.07080460813737305), ('S', 0.07410988246048224), ('T', 0.07242993582154593), ('U', 0.0289272388037645), ('V', 0.009153522059555467), ('W', 0.01434705167591524), ('X', 0.003096729223103298), ('Y', 0.01749958208224007), ('Z', 0.002659777584995724)]
@@ -19,12 +20,12 @@ LETTER_SMOOTHING_FACTOR = [0.0, 0.0, 0.04395604395604396, 0.0001372495196266813,
 
 class BPVar:
     def __init__(self, name, variable, candidates, cells):
-        self.name = name
+        self.name = name # key from crossword.variables i.e. 1A, 2D, 3A
         cells_by_position = {}
-        for cell in cells:
-            cells_by_position[cell.position] = cell
+        for cell in cells: # every cells or letter box that a particular variable or filling takes into consideration
+            cells_by_position[cell.position] = cell # cell.position (0,0) -> cell -> BPCell
             cell._connect(self)
-        self.length = len(cells)
+        self.length = len(cells) # obviously the length of the answer
         self.ordered_cells = [cells_by_position[pos] for pos in variable['cells']]
         self.candidates = candidates
         self.words = self.candidates['words']
@@ -97,7 +98,7 @@ class BPSolver(Solver):
                  model_path,
                  ans_tsv_path,
                  dense_embd_path,
-                 max_candidates = 5000,
+                 max_candidates = 100,
                  process_id = 0,
                  model_type = 'bert',
                  **kwargs):
@@ -129,6 +130,12 @@ class BPSolver(Solver):
                 self.bp_cells_by_clue[clue].append(cell)
         self.bp_vars = []
         for key, value in self.crossword.variables.items():
+            # if key == '1A':
+            #     print('-'*100)
+            #     print(self.candidates[key]['words'])
+            #     print(self.candidates[key]['bit_array'].shape)
+            #     print(self.candidates[key]['weights'])
+            #     print('-'*100)
             var = BPVar(key, value, self.candidates[key], self.bp_cells_by_clue[key])
             self.bp_vars.append(var)
     
@@ -161,7 +168,127 @@ class BPSolver(Solver):
                 return grid, all_grids
             else:
                 return grid
+        
+        '''
+            Code for ByT5 Re-Ranker starts from here
+        '''
+        self.reranker, self.tokenizer = setup_t5_reranker(self.process_id)
+
+        for i in range(iterative_improvement_steps):
+            print('starting iterative improvement step ' + str(i))
+            print("Accuracy if we knew to stop right now")
+            self.evaluate(grid)
+            grid, did_iterative_improvement_make_edit = self.iterative_improvement(grid)
+            if not did_iterative_improvement_make_edit:
+                break
+            if return_ii_states:
+                all_grids.append(deepcopy(grid))
+            print('after iterative improvement step ' + str(i))
+            print_grid(grid)
+
+        if return_greedy_states or return_ii_states:
+            return grid, all_grids
+        else:
+            return grid
+
+    def get_candidate_replacements(self, uncertain_answers, grid):
+        # find alternate answers for all the uncertain words
+        candidate_replacements = []
+        replacement_id_set = set()
+
+        # check against dictionaries
+        for clue in uncertain_answers.keys():
+            initial_word = uncertain_answers[clue]
+            clue_flips = get_word_flips(initial_word, 10) # flip then segment
+            clue_positions = [key for key, value in self.crossword.variables.items() if value['clue'] == clue]
+            for clue_position in clue_positions:
+                cells = sorted([cell for cell in self.bp_cells if clue_position in cell.crossing_clues], key=lambda c: c.position)
+                if len(cells) == len(initial_word):
+                    break
+            for flip in clue_flips:
+                if len(flip) != len(cells):
+                    import pdb; pdb.set_trace()
+                assert len(flip) == len(cells)
+                for i in range(len(flip)):
+                    if flip[i] != initial_word[i]:
+                        candidate_replacements.append([(cells[i], flip[i])])
+                        break
+
+        # also add candidates based on uncertainties in the letters, e.g., if we said P but G also had some probability, try G too
+        for cell_id, cell in enumerate(self.bp_cells): 
+            probs = np.exp(cell.log_probs)
+            above_threshold = list(probs > 0.01)
+            new_characters = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] for i in range(26) if above_threshold[i]]
+            # used = set()
+            # new_characters = [x for x in new_characters if x not in used and (used.add(x) or True)] # unique the set
+            new_characters = [x for x in new_characters if x != grid[cell.position[0]][cell.position[1]]] # ignore if its the same as the original solution
+            if len(new_characters) > 0: 
+                for new_character in new_characters:
+                    id = '_'.join([str(cell.position), new_character])
+                    if id not in replacement_id_set:
+                        candidate_replacements.append([(cell, new_character)])
+                    replacement_id_set.add(id)
+
+        # create composite flips based on things in the same row/column
+        composite_replacements = []
+        for i in range(len(candidate_replacements)):
+            for j in range(i+1, len(candidate_replacements)):
+                flip1, flip2 = candidate_replacements[i], candidate_replacements[j]
+                if flip1[0][0] != flip2[0][0]:
+                    if len(set(flip1[0][0].crossing_clues + flip2[0][0].crossing_clues)) < 4: # shared clue
+                        composite_replacements.append(flip1 + flip2)
+
+        candidate_replacements += composite_replacements
+
+        #print('\ncandidate replacements')
+        for cr in candidate_replacements:
+            modified_grid = deepcopy(grid)
+            for cell, letter in cr:
+                modified_grid[cell.position[0]][cell.position[1]] = letter
+            variables = set(sum([cell.crossing_vars for cell, _ in cr], []))
+            for var in variables:
+                original_fill = ''.join([grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                modified_fill = ''.join([modified_grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                #print('original:', original_fill, 'modified:', modified_fill)
+        
+        return candidate_replacements
+
+    def get_uncertain_answers(self, grid):
+        original_qa_pairs = {} # the original puzzle preds that we will try to improve
+        # first save what the argmax word-level prediction was for each grid cell just to make life easier
+        for var in self.crossword.variables:
+            # read the current word off the grid  
+            cells = self.crossword.variables[var]["cells"]
+            word = []
+            for cell in cells:
+                word.append(grid[cell[0]][cell[1]])
+            word = ''.join(word)
+            for cell in self.bp_cells: # loop through all cells
+                if cell.position in cells: # if this cell is in the word we are currently handling
+                    # save {clue, answer} pair into this cell
+                    cell.prediction[self.crossword.variables[var]['clue']] = word
+                    original_qa_pairs[self.crossword.variables[var]['clue']] = word
+
+        uncertain_answers = {}
+
+        # find uncertain answers
+        # right now the heuristic we use is any answer that is not in the answer set
+        for clue in original_qa_pairs.keys():
+            if original_qa_pairs[clue] not in answer_set:
+                uncertain_answers[clue] = original_qa_pairs[clue]
+
+        return uncertain_answers
     
+    def score_grid(self, grid):
+        clues = []
+        answers = []
+        for clue, cells in self.bp_cells_by_clue.items():
+            letters = ''.join([grid[cell.position[0]][cell.position[1]] for cell in sorted(list(cells), key=lambda c: c.position)])
+            clues.append(self.crossword.variables[clue]['clue'])
+            answers.append(letters)
+        scores = t5_reranker_score_with_clue(self.reranker, self.tokenizer, clues, answers)
+        return sum(scores)
+
     def greedy_sequential_word_solution(self, return_grids = False):
         all_grids = []
         # after we've run BP, we run a simple greedy search to get the final. 
@@ -211,3 +338,57 @@ class BPSolver(Solver):
             return grid, all_grids
         else:
             return grid
+        
+    def iterative_improvement(self, grid):
+        # check the grid for uncertain areas and save those words to be analyzed in local search, aka looking for alternate candidates
+        uncertain_answers = self.get_uncertain_answers(grid) 
+        self.candidate_replacements = self.get_candidate_replacements(uncertain_answers, grid)
+
+        print('\nstarting iterative improvement')
+        original_grid_score = self.score_grid(grid)
+        possible_edits = []
+        for replacements in self.candidate_replacements:
+            modified_grid = deepcopy(grid)
+            for cell, letter in replacements:
+                modified_grid[cell.position[0]][cell.position[1]] = letter
+            modified_grid_score = self.score_grid(modified_grid)
+            print('candidate edit')
+            variables = set(sum([cell.crossing_vars for cell, _ in replacements], []))
+            for var in variables:
+                original_fill = ''.join([grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                modified_fill = ''.join([modified_grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                clue_index = list(set(var.ordered_cells[0].crossing_clues).intersection(*[set(cell.crossing_clues) for cell in var.ordered_cells]))[0]
+                print('original:', original_fill, 'modified:', modified_fill)
+                print('gold answer', self.crossword.variables[clue_index]['gold'])
+                print('clue', self.crossword.variables[clue_index]['clue'])
+            print('original score:', original_grid_score, 'modified score:', modified_grid_score)
+            if modified_grid_score - original_grid_score > 0.5:
+                print('found a possible edit')
+                possible_edits.append((modified_grid, modified_grid_score, replacements))
+            print()
+        
+        if len(possible_edits) > 0:
+            variables_modified = set()
+            possible_edits = sorted(possible_edits, key=lambda x: x[1], reverse=True)
+            selected_edits = []
+            for edit in possible_edits:
+                replacements = edit[2]
+                variables = set(sum([cell.crossing_vars for cell, _ in replacements], []))
+                if len(variables_modified.intersection(variables)) == 0: # we can do multiple updates at once if they don't share clues
+                    variables_modified.update(variables)
+                    selected_edits.append(edit)
+
+            new_grid = deepcopy(grid)
+            for edit in selected_edits:
+                print('\nactually applying edit')
+                replacements = edit[2]
+                for cell, letter in replacements:
+                    new_grid[cell.position[0]][cell.position[1]] = letter
+                variables = set(sum([cell.crossing_vars for cell, _ in replacements], []))
+                for var in variables:
+                    original_fill = ''.join([grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                    modified_fill = ''.join([new_grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
+                    print('original:', original_fill, 'modified:', modified_fill)
+            return new_grid, True
+        else:
+            return grid, False
