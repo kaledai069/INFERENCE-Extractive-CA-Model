@@ -87,9 +87,12 @@ class BPCell:
         self.log_probs = log_softmax(sum(self.directional_scores))
 
     def propagate(self):
-        assert len(self.crossing_vars) == 2
-        for i, v in enumerate(self.crossing_vars):
-            v._propagate_to_var(self, self.directional_scores[1-i])
+        # assert len(self.crossing_vars) == 2
+        try:
+            for i, v in enumerate(self.crossing_vars):
+                v._propagate_to_var(self, self.directional_scores[1-i])
+        except IndexError:
+            pass
 
 
 class BPSolver(Solver):
@@ -137,6 +140,9 @@ class BPSolver(Solver):
             #     print(self.candidates[key]['weights'])
             #     print('-'*100)
             var = BPVar(key, value, self.candidates[key], self.bp_cells_by_clue[key])
+            # print('*'*100)
+            # print(self.bp_cells_by_clue[key])
+            # print('*'*100)
             self.bp_vars.append(var)
     
     def solve(self, num_iters=10, iterative_improvement_steps=5, return_greedy_states = False, return_ii_states = False):
@@ -159,7 +165,7 @@ class BPSolver(Solver):
         else:
             grid = self.greedy_sequential_word_solution()
             all_grids = []
-        grid = self.greedy_sequential_word_solution()
+        # grid = self.greedy_sequential_word_solution()
         # print('=====Greedy search grid=====')
         # print_grid(grid)
 
@@ -327,10 +333,23 @@ class BPSolver(Solver):
             best_var.words = []
             best_var.log_probs = best_var.log_probs[[]]
             best_per_var[best_index] = None
+
+        print("Before filling unfilled_cells")
+        print('*' * 100)
+        print_grid(grid)
+
+        unfilled_cells_count = 0
         for cell in self.bp_cells:
             if cell.position in unfilled_cells:
+                unfilled_cells_count += 1
                 grid[cell.position[0]][cell.position[1]] = string.ascii_uppercase[cell.log_probs.argmax()]
-        
+                
+        print(f"\nTotal Unfilled Cells: {float(unfilled_cells_count / len(self.bp_cells)) * 100:.4f} %")
+        print('*' * 100)
+        print("After filling the unfilled cells with Max Prob Letters")
+        print_grid(grid)
+        print('*' * 100)
+
         for var, (words, log_probs) in zip(self.bp_vars, cache): # restore state
             var.words = words
             var.log_probs = log_probs

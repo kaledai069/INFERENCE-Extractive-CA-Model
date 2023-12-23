@@ -41,7 +41,6 @@ MODEL_CONFIG = {
 	}
 }
 
-
 def getGrid(dateStr):
     headers = {
         'Referer': 'https://www.xwordinfo.com/JSON/'
@@ -64,7 +63,7 @@ def getGrid(dateStr):
 parser = argparse.ArgumentParser(description="My Python Script")
 parser.add_argument('--crossword_path', default = "nothing", type=str, help='Path to crossword JSON file.')
 parser.add_argument('--date', type = str, help = 'Crossdate to inference to.')
-parser.add_argument('--model', type = str, default = "bert", help = "Model type to inference with.")
+parser.add_argument('--model', type = str, default = "distilbert", help = "Model type to inference with.")
 args = parser.parse_args()
 
 MODEL_TYPE = vars(args)['model']
@@ -113,7 +112,7 @@ dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
 
 # print(choosen_model_path, ans_list_path, dense_embedding_path)
 try: 
-	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 500, model_type = MODEL_TYPE)
+	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 40000, model_type = MODEL_TYPE)
 	solution = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
 	accu_list = solver.evaluate(solution)
 except: 
