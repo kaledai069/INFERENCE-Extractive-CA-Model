@@ -46,10 +46,10 @@ class Solver:
                 clue = clue[:match.start()] + self.crossword.variables[var]['clue'] + clue[match.end():]
                 all_clues[idx] = clue
 
-        # print("MODEL PATH: ", type(self.dense_embd_glob))
         # get predictions
         dpr = setup_closedbook(self.model_path, self.ans_tsv_path, self.dense_embd_glob, self.process_id, self.model_type)
         all_words, all_scores = answer_clues(dpr, all_clues, max_answers = self.max_candidates, output_strings=True) 
+        
         for index, var in enumerate(self.crossword.variables):
             length = len(self.crossword.variables[var]["gold"])
             self.candidates[var] = {"words": [], "bit_array": None, "weights": {}}
@@ -63,21 +63,12 @@ class Solver:
                     keep_positions.append(word_index)
             words = [words[i] for i in keep_positions]
             scores = [scores[i] for i in keep_positions]
+
             scores = list(-np.log(softmax(np.array(scores) / 0.75)))
 
             for word, score in zip(words, scores):
                 self.candidates[var]["weights"][word] = score
- 
-            # for debugging purposes, print the rank of the gold answer on our candidate list
-            # the gold answer is otherwise *not* used in any way during solving
-            # if self.crossword.variables[var]["gold"] in words:
-            #     print(clue, self.crossword.variables[var]["gold"], words.index(self.crossword.variables[var]["gold"]))
-            # else:
-            #     print('not found', clue, self.crossword.variables[var]["gold"])
 
-            # fill up some data structures used later in solving
-            # for word, score in zip(words, scores):
-            #     self.candidates[var]["weights"][word] = score
             
             weights = self.candidates[var]["weights"]
             self.candidates[var]["words"] = sorted(weights, key=weights.get)
@@ -95,8 +86,7 @@ class Solver:
         # cleanup a bit
         del dpr
 
-    def evaluate(self, solution):
-        # print puzzle accuracy results given a generated solution
+    def evaluate(self, solution, print_log = True):
         letters_correct = 0
         letters_total = 0
         for i in range(len(self.crossword.letter_grid)):
@@ -111,10 +101,13 @@ class Solver:
             matching_cells = [self.crossword.letter_grid[cell[0]][cell[1]] == solution[cell[0]][cell[1]] for cell in cells]
             if len(cells) == sum(matching_cells):
                 words_correct += 1
-            else:
-                # print('evaluation: correct word', ''.join([self.crossword.letter_grid[cell[0]][cell[1]] for cell in cells]), 'our prediction:', ''.join([solution[cell[0]][cell[1]] for cell in cells]))
-                pass
             words_total += 1
-        print("Letters Correct: {}/{} | Words Correct: {}/{}".format(int(letters_correct), int(letters_total), int(words_correct), int(words_total)))
-        print("Letters Correct: {}% | Words Correct: {}%".format(float(letters_correct/letters_total*100), float(words_correct/words_total*100)))
-        return [(letters_correct/letters_total) * 100, (words_correct/words_total) * 100]
+
+        letter_frac_log = "Letters Correct: {}/{} | Words Correct: {}/{}".format(int(letters_correct), int(letters_total), int(words_correct), int(words_total))
+        letter_acc_log = "Letters Correct: {}% | Words Correct: {}%".format(float(letters_correct/letters_total*100), float(words_correct/words_total*100))
+
+        if print_log:
+            print(letter_frac_log)
+            print(letter_acc_log)
+        
+        return letter_frac_log, letter_acc_log

@@ -1,79 +1,107 @@
-import pandas as pd
-import re
-import tokenizers
-import json
-import puz
-import os
-import numpy as np
-import streamlit as st
-import scipy
-import sys
-import subprocess
-import copy
-import json
-from itertools import zip_longest
-from copy import deepcopy
-import regex
-from Crossword_inf import Crossword
-from BPSolver_inf import BPSolver
-from Models_inf import setup_closedbook, DPRForCrossword
-from Utils_inf import print_grid
-from Normal_utils_inf import puz_to_json
-from Strict_json import json_CA_json_converter
+# import pandas as pd
+# import re
+# import tokenizers
+# import puz
+# import os
+# import numpy as np
+# import streamlit as st
+# import scipy
+# import sys
+# import subprocess
+# import copy
+
+# from itertools import zip_longest
+# from copy import deepcopy
+# import regex
+
+# from Models_inf import setup_closedbook, DPRForCrossword
+# from Utils_inf import print_grid
+
+
 import argparse
 import time
-from Draw_grid import draw_grid
+
 import requests
 import json
 import datetime
+import json
 
+from copy import deepcopy
+from Crossword_inf import Crossword
+from BPSolver_inf import BPSolver
+from Strict_json import json_CA_json_converter
+from Draw_grid import draw_grid
+from Normal_utils_inf import puz_to_json, fetch_nyt_crossword
 
 MODEL_CONFIG = {
-	'bert': {
+	'bert': 
+	{
 		'MODEL_PATH' : "./Inference_components/dpr_biencoder_trained_EPOCH_2_COMPLETE.bin",
 		'ANS_TSV_PATH': "./Inference_components/all_answer_list.tsv",
 		'DENSE_EMBD_PATH': "./Inference_components/embeddings_BERT_EPOCH_2_COMPLETE0.pkl"
 	},
-	'distilbert': {
+	'distilbert': 
+	{
 		'MODEL_PATH': "./Inference_components/distilbert_EPOCHs_7_COMPLETE.bin", 
 		'ANS_TSV_PATH': "./Inference_components/all_answer_list.tsv",
 		'DENSE_EMBD_PATH': "./Inference_components/distilbert_7_epochs_embeddings.pkl"
+	},
+	't5_small':
+	{
+		'MODEL_PATH': './Inference_components/t5_small_new_dataset_2EPOCHS/'
 	}
 }
 
-def getGrid(dateStr):
-    headers = {
-        'Referer': 'https://www.xwordinfo.com/JSON/'
-    }
-    # mm/dd/yyyy
-    url = 'https://www.xwordinfo.com/JSON/Data.ashx?date=' + dateStr
+parser = argparse.ArgumentParser(description = "Args for the model types and option to do-second pass")
+parser.add_argument(
+					'--crossword_path', 
+					default = "nothing", 
+					type=str, 
+					help='Path to crossword JSON file.'
+				   )
 
-    response = requests.get(url, headers=headers)
+parser.add_argument(
+					'--date', 
+					type = str, 
+					help = 'Crossdate to inference to.'
+				   )
 
-    context = {}
-    grid_data = {}
-    if response.status_code == 200:
-        bytevalue = response.content
-        jsonText = bytevalue.decode('utf-8').replace("'", '"')
-        grid_data = json.loads(jsonText)
-        return grid_data
-    else:
-        print(f"Request failed with status code {response.status_code}.")
+parser.add_argument(
+					'--model', 
+					type = str, 
+					default = "distilbert", 
+					help = "Model type to inference with."
+				   )
 
-parser = argparse.ArgumentParser(description="My Python Script")
-parser.add_argument('--crossword_path', default = "nothing", type=str, help='Path to crossword JSON file.')
-parser.add_argument('--date', type = str, help = 'Crossdate to inference to.')
-parser.add_argument('--model', type = str, default = "distilbert", help = "Model type to inference with.")
+parser.add_argument(
+					'--second_pass', 
+					type = bool, 
+					default = 'False', 
+					help = 'Whether to use second pass model or not.'
+				   )
+parser.add_argument(
+					'--crossword_type',
+					type = str,
+					default = 'date',
+					help  = "Set the type of crossword: Options ['date', 'puz', 'json']"
+					)
+parser.add_argument
 args = parser.parse_args()
 
 MODEL_TYPE = vars(args)['model']
-DATE = vars(args)['date']
+DO_SECOND_PASS = vars(args)['second_pass']
+CROSSWORD_TYPE = vars(args)['crossword_type']
+
+if CROSSWORD_TYPE == 'date':
+	DATE = vars(args)['date']
 
 # Run the model off the 'DATE' -> "20XX/XX/XX" or from the .puz Crossword data file. 
-if args.date:
-	puzzle = getGrid(args.date)
-	puzzle = json_CA_json_converter(puzzle, False)
-else:
+if CROSSWORD_TYPE == 'date':
+	puzzle = fetch_nyt_crossword(args.date)
+	# puzzle = json_CA_json_converter(puzzle, False)
+elif CROSSWORD_TYPE == 'puz':
+	puzzle = puz_to_json(args.crossword_path, True)
+elif CROSSWORD_TYPE == 'json':
 	puzzle = json_CA_json_converter(args.crossword_path, True)
 
 for dim in ['across', 'down']:
@@ -103,23 +131,32 @@ for dim in ['across', 'down']:
 all_clue_info = [across_clue_data, down_clue_data]
 
 crossword = Crossword(puzzle)
-start_time = time.time()
+
 
 choosen_model_path = MODEL_CONFIG[MODEL_TYPE]['MODEL_PATH']
 ans_list_path = MODEL_CONFIG[MODEL_TYPE]['ANS_TSV_PATH']
 dense_embedding_path = MODEL_CONFIG[MODEL_TYPE]['DENSE_EMBD_PATH']
 
+second_pass_model_path = MODEL_CONFIG['t5_small']['MODEL_PATH']
 
 # print(choosen_model_path, ans_list_path, dense_embedding_path)
-try: 
-	solver = BPSolver(crossword, model_path = choosen_model_path, ans_tsv_path = ans_list_path, dense_embd_path = dense_embedding_path, max_candidates = 40000, model_type = MODEL_TYPE)
-	solution = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
-	accu_list = solver.evaluate(solution)
-except: 
-	print("Error Occured for date: ", args.date)
-	accu_list = []
-
+# try: 
+start_time = time.time()
+solver = BPSolver(
+					crossword, 
+					model_path = choosen_model_path, 
+					ans_tsv_path = ans_list_path, 
+					dense_embd_path = dense_embedding_path,
+					reranker_path = second_pass_model_path, 
+					max_candidates = 40000, 
+					model_type = MODEL_TYPE
+				)
+output = solver.solve(num_iters = 60, iterative_improvement_steps = 3)
 end_time = time.time()
+# except: 
+# 	print("Error Occured for date: ", args.date)
+# 	accu_list = []
+
 print("Total Inference Time: ", end_time - start_time, " seconds")
 
 # solution = [['L', 'A', 'M', 'O', 'R', '', 'S', 'M', 'A', 'C', 'K', '', 'U', 'S', 'A'], 
@@ -138,13 +175,30 @@ print("Total Inference Time: ", end_time - start_time, " seconds")
 # 			['R', 'I', 'B', '', 'M', 'A', 'R', 'I', 'E', '', 'A', 'S', 'W', 'A', 'N'], 
 # 			['E', 'T', 'S', '', 'C', 'R', 'E', 'T', 'E', '', 'P', 'E', 'S', 'T', 'S']]
 
+print(output)
+
+first_pass_solution = deepcopy(output['first pass model']['grid']) # gives the grid
+second_pass_solution = deepcopy(output['second pass model']['final grid']) # gives the grid
+first_pass_accu_list = [first_pass_solution['letter accuracy'], first_pass_solution['word accuracy']]
+second_pass_accu_list = [second_pass_solution['final letter'], second_pass_solution['final word']]
+
+'''
+	NOTE: take result output from above as you wish to...
+'''
+
+'''
+	Drawing crossword grid for either first_pass_solution or second_pass_solution
+'''
+'''
+  -------------------------------------------------------------------------------------------------------------------
+'''
+solution = first_pass_solution
 
 # suitable conversion to the drawing grid format
 for i in range(len(solution)):
 	for j in range(len(solution[0])):
 		if solution[i][j] == '':
 			solution[i][j] = 0
-
 
 overlay_truth_matrix = [[0] * cols for _ in range(rows)]
 grid_num_matrix = [["-"] * cols for _ in range(rows)]
@@ -184,7 +238,6 @@ for i in range(rows):
 
 wrong_A_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split(' ')[1] == 'A']
 wrong_D_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split(' ')[1] == 'D']
-# accu_list = [69, 59]
 
 wrong_clues = [wrong_A_num, wrong_D_num]
-draw_grid(solution, [rows, cols], overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)
+draw_grid(solution, [rows, cols], overlay_truth_matrix, grid_num_matrix, first_pass_accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)

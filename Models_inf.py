@@ -23,6 +23,8 @@ from Data_utils_inf import Tensorizer
 from Model_utils_inf import load_states_from_checkpoint, get_model_obj
 from transformers import T5ForConditionalGeneration, AutoTokenizer
 import time
+from wordsegment import load, segment
+load()
 
 SEGMENTER_CACHE = {}
 RERANKER_CACHE = {}
@@ -38,36 +40,57 @@ def setup_closedbook(model_path, ans_tsv_path, dense_embd_path, process_id, mode
     )
     return dpr
 
-def setup_t5_reranker(process_id):
-    tokenizer = AutoTokenizer.from_pretrained('google/byt5-small')
-    model = T5ForConditionalGeneration.from_pretrained('checkpoints/byt5_reranker/')
-    model.eval().to('cuda:'+str(process_id % torch.cuda.device_count()))
+def setup_t5_reranker(reranker_path, reranker_model_type = 't5-small'):
+    tokenizer = AutoTokenizer.from_pretrained(reranker_model_type)
+    model = T5ForConditionalGeneration.from_pretrained(reranker_path)
+    model.eval().to(torch.device('cuda' if torch.cuda.is_available() else 'cpu')) 
     return model, tokenizer
 
-def t5_reranker_score_with_clue(model, tokenizer, clues, possibly_ungrammatical_fills):
+def post_process_clue(clue):
+    clue = preprocess_clue_fn(clue)
+    if clue[-3:] == '. .':
+        clue = clue[:-3]
+    elif clue[-3:] == ' ..':
+        clue = clue[:-3]
+    elif clue[-2:] == '..':
+        clue = clue[:-2]
+    elif clue[-1] == '.':
+        clue = clue[:-1]
+    return clue
+
+def t5_reranker_score_with_clue(model, tokenizer, model_type, clues, possibly_ungrammatical_fills):
     global RERANKER_CACHE
     results = []
-    for clue, possibly_ungrammatical_fill in zip(clues, possibly_ungrammatical_fills):
+    device = model.device
+    
+    fills = possibly_ungrammatical_fills.copy()
+
+    if model_type == 't5-small':
+        segmented_fills = []
+        for answer in possibly_ungrammatical_fills:
+            segmented_fills.append(" ".join(segment(answer.lower())))
+        fills = segmented_fills.copy()
+    
+    for clue, possibly_ungrammatical_fill in zip(clues, fills):
+        # possibly here is where the byt5 failed
         if not possibly_ungrammatical_fill.islower():
             possibly_ungrammatical_fill = possibly_ungrammatical_fill.lower()
-        clue = preprocess_clue_fn(clue)
-        if clue[-3:] == '. .':
-            clue = clue[:-3]
-        elif clue[-3:] == ' ..':
-            clue = clue[:-3]
-        elif clue[-2:] == '..':
-            clue = clue[:-2]
-        elif clue[-1] == '.':
-            clue = clue[:-1]
+
+        clue = post_process_clue(clue)
 
         if clue + possibly_ungrammatical_fill in RERANKER_CACHE:
             results.append(RERANKER_CACHE[clue + possibly_ungrammatical_fill])
             continue
         else:
-            with torch.inference_mode():
-                inputs = tokenizer(['Q: ' + clue], return_tensors='pt')['input_ids'].to(model.device)
-                labels = tokenizer([possibly_ungrammatical_fill], return_tensors='pt')['input_ids'].to(model.device)
-                loss = model(inputs, labels=labels)
+            with torch.no_grad(), torch.inference_mode():
+                # move all the input tensors to the GPU (cuda)
+                inputs = tokenizer(["Q: " + clue], return_tensors='pt')['input_ids'].to(device)
+                labels = tokenizer([possibly_ungrammatical_fill], return_tensors='pt')['input_ids'].to(device)
+
+                # model mode set to evaluation 
+                model.eval()
+
+                loss = model(inputs, labels = labels)
                 answer_length = labels.shape[1]
                 logprob = -loss[0].item() * answer_length
                 results.append(logprob)

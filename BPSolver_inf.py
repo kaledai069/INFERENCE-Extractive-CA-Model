@@ -1,5 +1,6 @@
 import math
 import string
+import re
 from collections import defaultdict
 from copy import deepcopy
 
@@ -101,6 +102,7 @@ class BPSolver(Solver):
                  model_path,
                  ans_tsv_path,
                  dense_embd_path,
+                 reranker_path, 
                  max_candidates = 100,
                  process_id = 0,
                  model_type = 'bert',
@@ -114,6 +116,8 @@ class BPSolver(Solver):
                          model_type = model_type,
                          **kwargs)
         self.crossword = crossword
+        self.reranker_path = reranker_path
+        self.reranker_model_type = 't5-small'
 
         # our answer set
         self.answer_set = set()
@@ -144,10 +148,16 @@ class BPSolver(Solver):
             # print(self.bp_cells_by_clue[key])
             # print('*'*100)
             self.bp_vars.append(var)
+
+    def extract_float(self, input_string):
+        pattern = r"\d+\.\d+"
+        matches = re.findall(pattern, input_string)
+        float_numbers = [float(match) for match in matches]
+        return float_numbers
     
     def solve(self, num_iters=10, iterative_improvement_steps=5, return_greedy_states = False, return_ii_states = False):
         # run solving for num_iters iterations
-        print('beginning BP iterations')
+        print('\nBeginning Belief Propagation Iteration Steps: ')
         for _ in trange(num_iters):
             for var in self.bp_vars:
                 var.propagate()
@@ -157,7 +167,7 @@ class BPSolver(Solver):
                 cell.propagate()
             for var in self.bp_vars:
                 var.sync_state()
-        print('done BP iterations')
+        print('Belief Propagation Iteration Complete\n')
        
         # Get the current based grid based on greedy selection from the marginals
         if return_greedy_states:
@@ -165,37 +175,64 @@ class BPSolver(Solver):
         else:
             grid = self.greedy_sequential_word_solution()
             all_grids = []
-        # grid = self.greedy_sequential_word_solution()
-        # print('=====Greedy search grid=====')
-        # print_grid(grid)
+        
+        # properly save all the outputs results:
+        output_results = {}
+        output_results['first pass model'] = {}
+        output_results['first pass model']['grid'] = grid
 
-        if iterative_improvement_steps < 1:
+        # save first pass model grid, and letter accuracies
+        _, accu_log = self.evaluate(grid, False)
+        [ori_letter_accu, ori_word_accu] = self.extract_float(accu_log)
+        output_results['first pass model']['letter accuracy'] = ori_letter_accu
+        output_results['first pass model']['word accuracy'] = ori_word_accu
+
+
+        if iterative_improvement_steps < 1 or ori_letter_accu == 100.0:
             if return_greedy_states or return_ii_states:
                 return grid, all_grids
             else:
                 return grid
         
         '''
-            Code for ByT5 Re-Ranker starts from here
+            Iterative Improvement with t5-small starts from here.
         '''
-        self.reranker, self.tokenizer = setup_t5_reranker(self.process_id)
+        self.reranker, self.tokenizer = setup_t5_reranker(self.reranker_path, self.reranker_model_type)
+        
+        output_results['second pass model'] = {}
+        output_results['second pass model']['all grids'] = []
+        output_results['second pass model']['all letter accuracy'] = []
+        output_results['second pass model']['all word accuracy'] = []
 
         for i in range(iterative_improvement_steps):
-            print('starting iterative improvement step ' + str(i))
-            print("Accuracy if we knew to stop right now")
-            self.evaluate(grid)
             grid, did_iterative_improvement_make_edit = self.iterative_improvement(grid)
-            if not did_iterative_improvement_make_edit:
+
+            _, accu_log = self.evaluate(grid, False)
+            [temp_letter_accu, temp_word_accu] = self.extract_float(accu_log)
+            print(f"{i+1}th iteration: {accu_log}")
+
+            # save grid & accuracies at each iteration
+            output_results['second pass model']['all grids'].append(grid)
+            output_results['second pass model']['all letter accuracy'].append(temp_letter_accu)
+            output_results['second pass model']['all word accuracy'].append(temp_word_accu)
+
+            if not did_iterative_improvement_make_edit or temp_letter_accu == 100.0:
                 break
+
             if return_ii_states:
                 all_grids.append(deepcopy(grid))
-            print('after iterative improvement step ' + str(i))
-            print_grid(grid)
+
+        temp_lett_accu_list = output_results['second pass model']['all letter accuracy'].copy()
+        ii_max_index = temp_lett_accu_list.index(max(temp_lett_accu_list))
+
+        output_results['second pass model']['final grid'] = output_results['second pass model']['all grids'][ii_max_index]
+        output_results['second pass model']['final letter'] = output_results['second pass model']['all letter accuracy'][ii_max_index]
+        output_results['second pass model']['final word'] = output_results['second pass model']['all word accuracy'][ii_max_index]
 
         if return_greedy_states or return_ii_states:
-            return grid, all_grids
+            return output_results, all_grids
         else:
-            return grid
+            return output_results
 
     def get_candidate_replacements(self, uncertain_answers, grid):
         # find alternate answers for all the uncertain words
@@ -280,7 +317,7 @@ class BPSolver(Solver):
         # find uncertain answers
         # right now the heuristic we use is any answer that is not in the answer set
         for clue in original_qa_pairs.keys():
-            if original_qa_pairs[clue] not in answer_set:
+            if original_qa_pairs[clue] not in self.answer_set:
                 uncertain_answers[clue] = original_qa_pairs[clue]
 
         return uncertain_answers
@@ -292,7 +329,7 @@ class BPSolver(Solver):
             letters = ''.join([grid[cell.position[0]][cell.position[1]] for cell in sorted(list(cells), key=lambda c: c.position)])
             clues.append(self.crossword.variables[clue]['clue'])
             answers.append(letters)
-        scores = t5_reranker_score_with_clue(self.reranker, self.tokenizer, clues, answers)
+        scores = t5_reranker_score_with_clue(self.reranker, self.tokenizer, self.reranker_model_type, clues, answers)
         return sum(scores)
 
     def greedy_sequential_word_solution(self, return_grids = False):
@@ -313,7 +350,6 @@ class BPSolver(Solver):
             best_index = best_per_var.index(max([x for x in best_per_var if x is not None]))
             best_var = self.bp_vars[best_index]
             best_word = best_var.words[best_var.log_probs.argmax()]
-            # print('greedy filling in', best_word)
             for i, cell in enumerate(best_var.ordered_cells):
                 letter = best_word[i]
                 grid[cell.position[0]][cell.position[1]] = letter
@@ -334,22 +370,12 @@ class BPSolver(Solver):
             best_var.log_probs = best_var.log_probs[[]]
             best_per_var[best_index] = None
 
-        print("Before filling unfilled_cells")
-        print('*' * 100)
-        print_grid(grid)
-
         unfilled_cells_count = 0
         for cell in self.bp_cells:
             if cell.position in unfilled_cells:
                 unfilled_cells_count += 1
                 grid[cell.position[0]][cell.position[1]] = string.ascii_uppercase[cell.log_probs.argmax()]
                 
-        print(f"\nTotal Unfilled Cells: {float(unfilled_cells_count / len(self.bp_cells)) * 100:.4f} %")
-        print('*' * 100)
-        print("After filling the unfilled cells with Max Prob Letters")
-        print_grid(grid)
-        print('*' * 100)
-
         for var, (words, log_probs) in zip(self.bp_vars, cache): # restore state
             var.words = words
             var.log_probs = log_probs
@@ -363,7 +389,7 @@ class BPSolver(Solver):
         uncertain_answers = self.get_uncertain_answers(grid) 
         self.candidate_replacements = self.get_candidate_replacements(uncertain_answers, grid)
 
-        print('\nstarting iterative improvement')
+        # print('\nstarting iterative improvement')
         original_grid_score = self.score_grid(grid)
         possible_edits = []
         for replacements in self.candidate_replacements:
@@ -371,20 +397,20 @@ class BPSolver(Solver):
             for cell, letter in replacements:
                 modified_grid[cell.position[0]][cell.position[1]] = letter
             modified_grid_score = self.score_grid(modified_grid)
-            print('candidate edit')
+            # print('candidate edit')
             variables = set(sum([cell.crossing_vars for cell, _ in replacements], []))
             for var in variables:
                 original_fill = ''.join([grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
                 modified_fill = ''.join([modified_grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
                 clue_index = list(set(var.ordered_cells[0].crossing_clues).intersection(*[set(cell.crossing_clues) for cell in var.ordered_cells]))[0]
-                print('original:', original_fill, 'modified:', modified_fill)
-                print('gold answer', self.crossword.variables[clue_index]['gold'])
-                print('clue', self.crossword.variables[clue_index]['clue'])
-            print('original score:', original_grid_score, 'modified score:', modified_grid_score)
+            #     print('original:', original_fill, 'modified:', modified_fill)
+            #     print('gold answer', self.crossword.variables[clue_index]['gold'])
+            #     print('clue', self.crossword.variables[clue_index]['clue'])
+            # print('original score:', original_grid_score, 'modified score:', modified_grid_score)
             if modified_grid_score - original_grid_score > 0.5:
-                print('found a possible edit')
+                # print('found a possible edit')
                 possible_edits.append((modified_grid, modified_grid_score, replacements))
-            print()
+            # print()
         
         if len(possible_edits) > 0:
             variables_modified = set()
@@ -399,7 +425,7 @@ class BPSolver(Solver):
 
             new_grid = deepcopy(grid)
             for edit in selected_edits:
-                print('\nactually applying edit')
+                # print('\nactually applying edit')
                 replacements = edit[2]
                 for cell, letter in replacements:
                     new_grid[cell.position[0]][cell.position[1]] = letter
@@ -407,7 +433,7 @@ class BPSolver(Solver):
                 for var in variables:
                     original_fill = ''.join([grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
                     modified_fill = ''.join([new_grid[cell.position[0]][cell.position[1]] for cell in var.ordered_cells])
-                    print('original:', original_fill, 'modified:', modified_fill)
+                    # print('original:', original_fill, 'modified:', modified_fill)
             return new_grid, True
         else:
             return grid, False
