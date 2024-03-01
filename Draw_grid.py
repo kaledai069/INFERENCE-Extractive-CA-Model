@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 
-def draw_grid(data, grid_size, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, puzzle_date, model_type):
+def draw_grid(data, grid_size, overlay_truth_matrix, grid_num_matrix, accu_list, all_clue_info, wrong_clues, puzzle_date = '06/09/2069', model_type = 'distilbert'):
     print(len(grid_num_matrix), len(grid_num_matrix[0]))
     rows, cols = grid_size
     cell_size = 38

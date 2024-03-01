@@ -32,6 +32,7 @@ from BPSolver_inf import BPSolver
 from Strict_json import json_CA_json_converter
 from Draw_grid import draw_grid
 from Normal_utils_inf import puz_to_json, fetch_nyt_crossword
+from second_pass_only import SecondPassSolver
 
 MODEL_CONFIG = {
 	'bert': 
@@ -100,7 +101,7 @@ if CROSSWORD_TYPE == 'date':
 	puzzle = fetch_nyt_crossword(args.date)
 	# puzzle = json_CA_json_converter(puzzle, False)
 elif CROSSWORD_TYPE == 'puz':
-	puzzle = puz_to_json(args.crossword_path, True)
+	puzzle = puz_to_json(args.crossword_path)
 elif CROSSWORD_TYPE == 'json':
 	puzzle = json_CA_json_converter(args.crossword_path, True)
 
@@ -130,8 +131,8 @@ for dim in ['across', 'down']:
 
 all_clue_info = [across_clue_data, down_clue_data]
 
+# this crossword variable or object should be separately used for second pass only module too 
 crossword = Crossword(puzzle)
-
 
 choosen_model_path = MODEL_CONFIG[MODEL_TYPE]['MODEL_PATH']
 ans_list_path = MODEL_CONFIG[MODEL_TYPE]['ANS_TSV_PATH']
@@ -151,7 +152,24 @@ solver = BPSolver(
 					max_candidates = 40000, 
 					model_type = MODEL_TYPE
 				)
-output = solver.solve(num_iters = 60, iterative_improvement_steps = 3)
+
+
+output, bp_cells, bp_cells_by_clue = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
+first_pass_grid = output['first pass model']['grid']
+
+second_pass_solver = SecondPassSolver(
+										first_pass_grid = first_pass_grid,
+										crossword = crossword,
+										ans_tsv_path = ans_list_path, 
+										reranker_path =  second_pass_model_path,
+										reranker_model_type = 't5-small',
+										bp_cells = bp_cells,
+										bp_cells_by_clue = bp_cells_by_clue,
+										iterative_improvement_steps = 2
+									 )
+second_pass_output = second_pass_solver.solve()
+print(second_pass_output)
+
 end_time = time.time()
 # except: 
 # 	print("Error Occured for date: ", args.date)
@@ -177,10 +195,15 @@ print("Total Inference Time: ", end_time - start_time, " seconds")
 
 print(output)
 
+first_pass_output = output['first pass model']
 first_pass_solution = deepcopy(output['first pass model']['grid']) # gives the grid
-second_pass_solution = deepcopy(output['second pass model']['final grid']) # gives the grid
-first_pass_accu_list = [first_pass_solution['letter accuracy'], first_pass_solution['word accuracy']]
-second_pass_accu_list = [second_pass_solution['final letter'], second_pass_solution['final word']]
+first_pass_accu_list = [first_pass_output['letter accuracy'], first_pass_output['word accuracy']]
+
+if 'second pass model' in second_pass_output.keys():
+	second_pass_output = second_pass_output['second pass model']
+	second_pass_solution = deepcopy(second_pass_output['second pass model']['final grid']) # gives the grid
+	second_pass_accu_list = [second_pass_output['final letter'], second_pass_output['final word']]
+
 
 '''
 	NOTE: take result output from above as you wish to...
@@ -240,4 +263,4 @@ wrong_A_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split('
 wrong_D_num = [x.split(' ')[0] for x in list(set(wrong_clues_list)) if x.split(' ')[1] == 'D']
 
 wrong_clues = [wrong_A_num, wrong_D_num]
-draw_grid(solution, [rows, cols], overlay_truth_matrix, grid_num_matrix, first_pass_accu_list, all_clue_info, wrong_clues, DATE, MODEL_TYPE)
+draw_grid(solution, [rows, cols], overlay_truth_matrix, grid_num_matrix, first_pass_accu_list, all_clue_info, wrong_clues, "06/09/2069", MODEL_TYPE)
