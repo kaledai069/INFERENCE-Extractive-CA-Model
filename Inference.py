@@ -33,6 +33,7 @@ from Strict_json import json_CA_json_converter
 from Draw_grid import draw_grid
 from Normal_utils_inf import puz_to_json, fetch_nyt_crossword
 from second_pass_only import SecondPassSolver
+from evaluate import evaluate_grid
 
 MODEL_CONFIG = {
 	'bert': 
@@ -149,13 +150,21 @@ solver = BPSolver(
 					ans_tsv_path = ans_list_path, 
 					dense_embd_path = dense_embedding_path,
 					reranker_path = second_pass_model_path, 
-					max_candidates = 40000, 
+					max_candidates = 25000, 
 					model_type = MODEL_TYPE
 				)
 
 
-output, bp_cells, bp_cells_by_clue = solver.solve(num_iters = 60, iterative_improvement_steps = 0)
+output, bp_cells, bp_cells_by_clue = solver.solve(num_iters = 50, iterative_improvement_steps = 0)
 first_pass_grid = output['first pass model']['grid']
+
+print(bp_cells[0].position)
+print(bp_cells[0].crossing_clues)
+print(bp_cells[0].log_probs)
+print(bp_cells_by_clue.keys())
+exit(0)
+
+print(evaluate_grid(puzzle, first_pass_grid))
 
 second_pass_solver = SecondPassSolver(
 										first_pass_grid = first_pass_grid,
@@ -168,6 +177,7 @@ second_pass_solver = SecondPassSolver(
 										iterative_improvement_steps = 2
 									 )
 second_pass_output = second_pass_solver.solve()
+print(output)
 print(second_pass_output)
 
 end_time = time.time()

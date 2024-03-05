@@ -11,12 +11,12 @@ def json_CA_json_converter(json_file_path, is_path):
 
   rows = data['size']['rows']
   cols = data['size']['cols']
-  date = data['date']
+  # date = data['date']
 
   clues = data['clues']
   answers = data['answers']
 
-  json_conversion_dict['metadata'] = {'date': date, 'rows': rows, 'cols': cols}
+  json_conversion_dict['metadata'] = {'date': '01/01/2069', 'rows': rows, 'cols': cols}
 
   across_clue_answer = {}
   down_clue_answer = {}
